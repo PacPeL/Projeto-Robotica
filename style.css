@@ -1,0 +1,334 @@
+/* Variáveis de cores e efeitos visuais reutilizáveis */
+:root {
+    --primary: #0ff0fc;         /* Cor primária (azul neon) */
+    --secondary: #ff2a6d;       /* Cor secundária (rosa neon) */
+    --on-color: #00ff9d;        /* Cor para estado "ligado" (verde neon) */
+    --off-color: #555;          /* Cor para estado "desligado" (cinza) */
+    --center-on: #ffd300;       /* Cor para botões centrais (amarelo) */
+    --text-light: #f5f5f5;      /* Cor do texto claro */
+    --panel-bg: rgba(10, 10, 30, 0.8); /* Fundo dos painéis (azul escuro semi-transparente) */
+    --bg-color: #050520;        /* Cor de fundo principal (azul muito escuro) */
+    --divider: #3a3a5a;         /* Cor dos divisores */
+    --counter: #bd00ff;         /* Cor para contadores (roxo neon) */
+    --neon-glow: 0 0 10px, 0 0 20px, 0 0 30px; /* Efeito de brilho neon */
+}
+
+/* Reset básico e configurações globais */
+* {
+    box-sizing: border-box;     /* Modelo de caixa mais intuitivo */
+    -webkit-tap-highlight-color: transparent; /* Remove highlight ao tocar em elementos no mobile */
+}
+
+/* Estilos do corpo da página */
+body {
+    font-family: 'Arial', sans-serif;  /* Fonte principal */
+    background-color: var(--bg-color); /* Cor de fundo */
+    color: var(--text-light);          /* Cor do texto */
+    margin: 0;
+    padding: 10px;
+    text-align: center;
+    /* Gradientes radiais para efeito de luzes neon no fundo */
+    background-image: 
+        radial-gradient(circle at 10% 20%, rgba(255, 42, 109, 0.1) 0%, transparent 20%),
+        radial-gradient(circle at 90% 80%, rgba(0, 255, 157, 0.1) 0%, transparent 20%),
+        radial-gradient(circle at 50% 50%, rgba(11, 240, 252, 0.1) 0%, transparent 30%);
+    /* Animação suave de pulsação do fundo */
+    animation: bgPulse 15s infinite alternate;
+    touch-action: manipulation; /* Melhora a interação em dispositivos touch */
+    overflow-x: hidden;         /* Previne rolagem horizontal */
+}
+
+/* Animação de pulsação do fundo */
+@keyframes bgPulse {
+    0% { background-color: #050520; }
+    25% { background-color: #0a0a30; }
+    50% { background-color: #050535; }
+    75% { background-color: #0a0a30; }
+    100% { background-color: #050520; }
+}
+
+/* Estilo do título principal */
+h1 {
+    color: var(--primary);      /* Cor neon azul */
+    font-size: 1.8rem;
+    margin: 10px 0;
+    /* Efeito de brilho neon no texto */
+    text-shadow: 0 0 5px var(--primary), 0 0 15px var(--primary);
+    /* Animação de pulsação do brilho */
+    animation: titleGlow 3s infinite alternate;
+}
+
+/* Animação do brilho do título */
+@keyframes titleGlow {
+    from { text-shadow: 0 0 5px var(--primary), 0 0 10px var(--primary); }
+    to { text-shadow: 0 0 10px var(--primary), 0 0 20px var(--primary), 0 0 30px var(--primary); }
+}
+
+/* Estilo dos painéis de controle */
+.control-panel {
+    background-color: var(--panel-bg); /* Fundo semi-transparente */
+    border-radius: 10px;               /* Bordas arredondadas */
+    padding: 15px;
+    margin: 10px auto;
+    max-width: 100%;
+    /* Efeitos visuais */
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(100, 100, 255, 0.2);
+    backdrop-filter: blur(5px);        /* Efeito de desfoque do fundo */
+}
+
+/* Estilo dos títulos das seções */
+.section-title {
+    color: var(--primary);             /* Cor neon azul */
+    margin: 15px 0 10px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    text-shadow: 0 0 3px var(--primary); /* Efeito de brilho sutil */
+}
+
+/* Estilo base dos botões */
+.btn {
+    border: none;
+    color: white;
+    padding: 12px 20px;
+    margin: 6px;
+    border-radius: 6px;                /* Bordas arredondadas */
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s;              /* Transição suave para hover/active */
+    width: 100%;
+    max-width: 280px;                  /* Largura máxima */
+    font-weight: bold;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3); /* Sombra sutil */
+    -webkit-user-select: none;         /* Previne seleção de texto */
+    user-select: none;
+}
+
+/* Efeito ao pressionar botões */
+.btn:active {
+    transform: scale(0.98);           /* Pequeno encolhimento */
+}
+
+/* Variante de botão para estado "ligado" */
+.btn-on {
+    background-color: var(--on-color); /* Verde neon */
+    color: #111;                       /* Texto escuro para contraste */
+}
+
+/* Variante de botão para estado "desligado" */
+.btn-off {
+    background-color: var(--off-color); /* Cinza */
+}
+
+/* Variante de botão para elementos centrais */
+.btn-center-on {
+    background-color: var(--center-on); /* Amarelo */
+    color: #202124;                     /* Texto escuro */
+}
+
+/* Variante de botão para contadores */
+.btn-counter {
+    background-color: var(--counter);   /* Roxo neon */
+}
+
+/* Container para agrupar inputs/labels */
+.input-container {
+    display: flex;
+    flex-direction: column;             /* Disposição vertical */
+    align-items: center;
+    margin: 10px 0;
+}
+
+/* Estilo dos labels */
+.input-label {
+    font-size: 0.9rem;
+    margin-bottom: 5px;
+    color: #BDBDBD;                     /* Cinza claro */
+}
+
+/* Divisor entre seções */
+.divider {
+    height: 1px;
+    /* Gradiente para efeito de divisor com fade */
+    background: linear-gradient(to right, transparent, var(--divider), transparent);
+    margin: 15px 0;
+    border: none;
+}
+
+/* Estilo do status de conexão */
+.status {
+    margin: 15px auto;
+    padding: 10px;
+    border-radius: 6px;
+    font-weight: bold;
+    max-width: 100%;
+    font-size: 0.9rem;
+}
+
+/* Variante para status "conectado" */
+.connected {
+    background-color: var(--on-color);  /* Verde neon */
+    color: #111;                        /* Texto escuro */
+    animation: pulseConnected 2s infinite; /* Animação de pulsação */
+}
+
+/* Animação de pulsação para status conectado */
+@keyframes pulseConnected {
+    0% { box-shadow: 0 0 5px var(--on-color); }
+    50% { box-shadow: 0 0 15px var(--on-color); }
+    100% { box-shadow: 0 0 5px var(--on-color); }
+}
+
+/* Variante para status "desconectado" */
+.disconnected {
+    background-color: #ff3333;          /* Vermelho */
+    animation: pulseDisconnected 2s infinite; /* Animação de pulsação */
+}
+
+/* Animação de pulsação para status desconectado */
+@keyframes pulseDisconnected {
+    0% { box-shadow: 0 0 5px #ff3333; }
+    50% { box-shadow: 0 0 15px #ff3333; }
+    100% { box-shadow: 0 0 5px #ff3333; }
+}
+
+/* Layout para os contadores */
+.counters-container {
+    display: grid;
+    /* Layout responsivo com colunas flexíveis */
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin: 15px 0;
+}
+
+/* Estilo dos elementos de contador */
+.counter {
+    background-color: var(--panel-bg);  /* Fundo semi-transparente */
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3); /* Sombra sutil */
+    border: 1px solid rgba(100, 100, 255, 0.1); /* Borda sutil */
+}
+
+/* Estilo do valor do contador */
+.counter-value {
+    font-size: 1.3rem;
+    font-weight: bold;
+    margin: 5px 0;
+    color: var(--primary);              /* Cor neon azul */
+}
+
+/* Estilo do label do contador */
+.counter-label {
+    font-size: 0.8rem;
+    color: #BDBDBD;                     /* Cinza claro */
+}
+
+/* Container do histórico */
+.history-container {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: var(--panel-bg);   /* Fundo semi-transparente */
+    border-radius: 8px;
+    max-height: 150px;                  /* Altura máxima com scroll */
+    overflow-y: auto;                   /* Scroll vertical quando necessário */
+    scrollbar-width: thin;              /* Scrollbar fina */
+}
+
+/* Título do histórico */
+.history-title {
+    color: var(--primary);              /* Cor neon azul */
+    margin-bottom: 10px;
+    font-size: 1rem;
+}
+
+/* Itens do histórico */
+.history-item {
+    display: flex;
+    justify-content: space-between;     /* Espaço entre os elementos */
+    padding: 6px 0;
+    border-bottom: 1px solid var(--divider); /* Divisor entre itens */
+    font-size: 0.85rem;
+}
+
+/* Texto do tempo médio */
+.average-time {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: var(--center-on);            /* Amarelo */
+}
+
+/* Estilos responsivos para mobile */
+@media (max-width: 600px) {
+    body {
+        padding: 5px;
+        font-size: 14px;                /* Texto menor */
+    }
+    
+    h1 {
+        font-size: 1.5rem;              /* Título menor */
+    }
+    
+    .btn {
+        padding: 10px 15px;             /* Botões mais compactos */
+        font-size: 0.85rem;
+        margin: 4px;
+    }
+    
+    .section-title {
+        font-size: 1rem;                /* Títulos de seção menores */
+    }
+    
+    .counter {
+        padding: 8px;                   /* Contadores mais compactos */
+    }
+    
+    .counter-value {
+        font-size: 1.1rem;              /* Valores menores */
+    }
+}
+
+/* Previne zoom em inputs no iOS */
+@media screen and (-webkit-min-device-pixel-ratio:0) {
+    select,
+    textarea,
+    input {
+        font-size: 16px !important;     /* Tamanho fixo para inputs */
+    }
+}
+
+/* Estilos para o prompt de instalação do PWA */
+#installContainer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.9);       /* Fundo escuro semi-transparente */
+    padding: 10px;
+    display: none;                      /* Oculto por padrão */
+    z-index: 1000;                      /* Sobre tudo */
+    text-align: center;
+}
+
+/* Botão de instalação */
+#installButton {
+    background: var(--primary);         /* Azul neon */
+    color: #000;                        /* Texto preto */
+    border: none;
+    padding: 8px 15px;
+    border-radius: 5px;
+    margin: 5px;
+    font-weight: bold;
+}
+
+/* Botão para fechar o prompt */
+#closeInstall {
+    background: transparent;            /* Fundo transparente */
+    color: #fff;                        /* Texto branco */
+    border: 1px solid #fff;             /* Borda branca */
+    padding: 8px 15px;
+    border-radius: 5px;
+    margin: 5px;
+}

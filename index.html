@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <!-- Configurações básicas da página e inclusão das bibliotecas Firebase -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Controle Industrial - Firebase</title>
+    
+    <!-- Inclusão do Firebase App e Realtime Database (versão 8) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+    <!-- Estilos CSS externos -->
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <!-- Título principal da aplicação -->
+    <h1>Controle Industrial - Firebase</h1>
+
+    <!-- Indicador de conexão com Firebase -->
+    <div class="status disconnected" id="connectionStatus">Desconectado do Firebase</div>
+    
+    <!-- Seção com contadores de tempo -->
+    <div class="counters-container">
+        <!-- Mostra o tempo de ciclo atual -->
+        <div class="counter">
+            <div class="counter-label">Tempo de Ciclo Atual</div>
+            <div class="counter-value" id="cycleTime">00:00:00</div>
+        </div>
+        <!-- Mostra o tempo médio de todos os ciclos -->
+        <div class="counter">
+            <div class="counter-label">Tempo Médio</div>
+            <div class="counter-value" id="averageTime">00:00:00</div>
+        </div>
+    </div>
+    
+    <!-- Seção do histórico de tempos -->
+    <div class="history-container">
+        <div class="history-title">Histórico de Tempos</div>
+        <!-- Lista de tempos anteriores registrados -->
+        <div id="timeHistory"></div>
+        <!-- Exibe a média dos tempos registrados -->
+        <div class="average-time" id="averageTimeText">Média: 00:00:00</div>
+    </div>
+    
+    <!-- Painel de controle dos componentes do sistema -->
+    <div class="control-panel">
+        <!-- Controle do modo automático -->
+        <div class="section-title">Modo Automático</div>
+        <div class="input-container">
+            <div class="input-label">Estado do sistema</div>
+            <button id="automaticoBtn" class="btn btn-off">AUTOMÁTICO DESLIGADO</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Controle dos atuadores -->
+        <div class="section-title">Atuadores</div>
+
+        <div class="input-container">
+            <div class="input-label">Garra</div>
+            <button id="garraBtn" class="btn btn-off">DESLIGADO</button>
+        </div>
+
+        <div class="input-container">
+            <div class="input-label">Início (Trava/Pino)</div>
+            <button id="inicioBtn" class="btn btn-off">DESLIGADO</button>
+        </div>
+
+        <div class="input-container">
+            <div class="input-label">Centro (Magazine)</div>
+            <button id="centroBtn" class="btn btn-off">DESLIGADO</button>
+        </div>
+
+        <div class="input-container">
+            <div class="input-label">Final (Medidor)</div>
+            <button id="finalBtn" class="btn btn-off">DESLIGADO</button>
+        </div>
+
+        <div class="input-container">
+            <div class="input-label">Prensa (Esteira)</div>
+            <button id="prensaBtn" class="btn btn-off">DESLIGADO</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Controle dos movimentos -->
+        <div class="section-title">Movimentos</div>
+
+        <div class="input-container">
+            <div class="input-label">Movimento Final</div>
+            <button id="movFinalBtn" class="btn btn-off">DESLIGADO</button>
+        </div>
+
+        <div class="input-container">
+            <div class="input-label">Movimento Inicial</div>
+            <button id="movInicialBtn" class="btn btn-off">DESLIGADO</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Leitura dos sensores conectados ao sistema -->
+        <div class="section-title">Sensores</div>
+
+        <div class="input-container">
+            <div class="input-label">Sensor Garra (ED0)</div>
+            <div id="sensorGarra" class="btn btn-off">INATIVO</div>
+        </div>
+
+        <div class="input-container">
+            <div class="input-label">Sensor Metálico (ED1)</div>
+            <div id="sensorMetalico" class="btn btn-off">INATIVO</div>
+        </div>
+
+        <div class="input-container">
+            <div class="input-label">Sensor Final (ED2)</div>
+            <div id="sensorFinal" class="btn btn-off">INATIVO</div>
+        </div>
+
+        <div class="input-container">
+            <div class="input-label">Sensor Óptico 2 (ED3)</div>
+            <div id="sensorOptico2" class="btn btn-off">INATIVO</div>
+        </div>
+
+        <div class="input-container">
+            <div class="input-label">Sensor Medidor Meio (ED4)</div>
+            <div id="sensorMedidorMeio" class="btn btn-off">INATIVO</div>
+        </div>
+
+        <div class="input-container">
+            <div class="input-label">Sensor Medidor Final (ED5)</div>
+            <div id="sensorMedidorFinal" class="btn btn-off">INATIVO</div>
+        </div>
+
+        <div class="input-container">
+            <div class="input-label">Sensor Magazine (ED6)</div>
+            <div id="sensorMagazine" class="btn btn-off">INATIVO</div>
+        </div>
+        
+        <div class="divider"></div>
+        
+        <!-- Botão para resetar os contadores de tempo -->
+        <div class="input-container">
+            <button id="resetCountersBtn" class="btn btn-counter">Reiniciar Contadores</button>
+        </div>
+    </div>
+
+    <!-- Seção que oferece instalação do app como PWA -->
+    <div id="installContainer">
+        <p>Instalar este app no seu dispositivo para melhor experiência</p>
+        <button id="installButton">Instalar</button>
+        <button id="closeInstall">Fechar</button>
+    </div>
+
+    <!-- Script JavaScript principal da aplicação -->
+    <script src="./script.js"></script>
+</body>
+</html>

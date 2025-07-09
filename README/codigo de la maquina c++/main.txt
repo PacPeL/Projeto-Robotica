@@ -1,0 +1,681 @@
+#include <Arduino.h>
+#include <WiFi.h>
+#include <Firebase_ESP_Client.h>
+#include "addons/TokenHelper.h"
+#include "addons/RTDBHelper.h"
+
+// ========== CONFIGURAÇÃO DE HARDWARE ==========
+
+// Configuração WiFi
+#define WIFI_SSID "testes"            // Nome da rede WiFi
+#define WIFI_PASSWORD "12345678"      // Senha da rede WiFi
+
+// Configuração Firebase
+#define API_KEY "AIzaSyC7t54W8mhFiCVxZlEeJ69AuNdhfdz1rrw"  // Chave API do Firebase
+#define DATABASE_URL "https://projeto-mecatronica-default-rtdb.firebaseio.com/"  // URL do banco de dados
+#define USER_EMAIL "admin@gmail.com"   // Email para autenticação no Firebase
+#define USER_PASSWORD "admin124578"    // Senha para autenticação
+
+// Definição de pinos de entrada (sensores)
+#define ENTRADA_VP   36    // ED0 - Sensor de início (sensor de garra)
+#define ENTRADA_VN   39    // ED1 - Sensor metálico
+#define ENTRADA_D34  34    // ED2 - Sensor final
+#define ENTRADA_D32  32    // ED3 - Sensor óptico 2
+#define ENTRADA_D33  33    // ED4 - Sensor medidor meio
+#define ENTRADA_D25  25    // ED5 - Sensor medidor final
+#define ENTRADA_D26  26    // ED6 - Sensor magazine avançado
+#define ENTRADA_D27  27    // ED7 - (Sem uso atual)
+
+// Definição de pinos de saída (atuadores)
+#define SAIDA_D22  22    // SD1 - Esteira (prensadora)
+#define SAIDA_D21  21    // SD2 - Separador (não usar atualmente)
+#define SAIDA_TX2  17    // SD5 - Garra
+#define SAIDA_RX2  16    // SD6 - Deslocar para lá
+#define SAIDA_D4   4     // SD7 - Deslocar para cá
+
+// Pinos de saída para testes
+#define SAIDA_D23  23    // Teste 1 - Trava/Pino (início)
+#define SAIDA_D19  19    // Teste 2 - Magazine (centro)
+#define SAIDA_D18  18    // Teste 3 - Medidor (final)
+
+// ========== VARIÁVEIS DE ESTADO ==========
+
+// Estados dos atuadores
+String stateAutomatico = "off";  // Modo automático
+String stateGarra = "off";       // Garra
+String stateInicio = "off";      // Início (Trava/Pino)
+String stateCentro = "off";      // Centro (Magazine)
+String stateFinal = "off";       // Final (Medidor)
+String statePrensa = "off";      // Prensa (Esteira)
+String stateZ0 = "off";          // Movimento final
+String stateZ1 = "off";          // Movimento inicial
+
+// Estados dos sensores
+String entradaSensorGarra = "off";          // ED0
+String entradaSensorMetalico = "off";       // ED1
+String entradaSensorFinal = "off";          // ED2
+String entradaSensorOptico2 = "off";        // ED3
+String entradaSensorMedidorMeio = "off";    // ED4
+String entradaSensorMedidorFinal = "off";   // ED5
+String entradaSensorMagazine = "off";       // ED6
+
+// ========== OBJETOS E CONFIGURAÇÕES ==========
+
+FirebaseData fbdo;       // Objeto para manipular dados do Firebase
+FirebaseAuth auth;       // Objeto para autenticação no Firebase
+FirebaseConfig config;   // Configuração do Firebase
+
+WiFiServer server(80);   // Servidor web na porta 80
+String header;           // Variável para armazenar requisições HTTP
+
+// Variáveis para controle de tempo
+unsigned long currentTime = millis();
+unsigned long previousTime = 0;
+const long timeoutTime = 2000;  // Tempo de espera para conexões web
+
+// Controle de atualização para o Firebase
+unsigned long lastFirebaseUpdate = 0;
+const unsigned long firebaseInterval = 1000;  // Intervalo de atualização (1s)
+
+// ========== FUNÇÃO SETUP ==========
+void setup() {
+  Serial.begin(9600);  // Inicia comunicação serial
+  
+  // Configuração dos pinos de entrada
+  pinMode(ENTRADA_VP, INPUT);
+  pinMode(ENTRADA_VN, INPUT);
+  pinMode(ENTRADA_D34, INPUT);
+  pinMode(ENTRADA_D32, INPUT);
+  pinMode(ENTRADA_D33, INPUT);
+  pinMode(ENTRADA_D25, INPUT);
+  pinMode(ENTRADA_D26, INPUT);
+  pinMode(ENTRADA_D27, INPUT);
+
+  // Configuração dos pinos de saída
+  pinMode(SAIDA_D23, OUTPUT);
+  pinMode(SAIDA_D22, OUTPUT);
+  pinMode(SAIDA_D21, OUTPUT);
+  pinMode(SAIDA_D19, OUTPUT);
+  pinMode(SAIDA_D18, OUTPUT);
+  pinMode(SAIDA_TX2, OUTPUT);
+  pinMode(SAIDA_RX2, OUTPUT);
+  pinMode(SAIDA_D4, OUTPUT);
+
+  // Inicializa todas as saídas em LOW (desligado)
+  digitalWrite(SAIDA_TX2, LOW);
+  digitalWrite(SAIDA_RX2, LOW);
+  digitalWrite(SAIDA_D4, LOW);
+  digitalWrite(SAIDA_D23, LOW);
+  digitalWrite(SAIDA_D22, LOW);
+  digitalWrite(SAIDA_D21, LOW);
+  digitalWrite(SAIDA_D19, LOW);
+  digitalWrite(SAIDA_D18, LOW);
+
+  // Conexão ao WiFi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Conectando ao WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.print("Conectado com IP: ");
+  Serial.println(WiFi.localIP());
+  server.begin();  // Inicia o servidor web
+
+  // Configuração do Firebase
+  config.api_key = API_KEY;
+  config.database_url = DATABASE_URL;
+  auth.user.email = USER_EMAIL;
+  auth.user.password = USER_PASSWORD;
+
+  Firebase.reconnectNetwork(true);
+  fbdo.setBSSLBufferSize(4096, 1024);  // Configura buffers para SSL
+  fbdo.setResponseSize(2048);          // Tamanho da resposta
+  
+  // Atribui callback para tratamento do token
+  config.token_status_callback = tokenStatusCallback;
+  
+  Firebase.begin(&config, &auth);  // Inicia o Firebase
+  Firebase.setDoubleDigits(5);     // Precisão para números
+
+  Serial.println("Sistema iniciado corretamente");
+}
+
+// ========== FUNÇÃO MODO AUTOMÁTICO ==========
+void modoAutomatico() {
+  // Verifica se o sensor de garra está ativado
+  if(digitalRead(ENTRADA_VP) == HIGH){
+    delay(2000);
+    digitalWrite(SAIDA_TX2, HIGH);  // Ativa a garra
+    Firebase.RTDB.setString(&fbdo, "/output/GARRA/state", "on");
+
+    // Se sensor óptico 2 está ativado
+    if(digitalRead(ENTRADA_D32) == HIGH){
+      digitalWrite(SAIDA_D19, HIGH);  // Ativa o magazine
+      digitalWrite(SAIDA_D23, LOW);   // Desativa a trava/pino
+      Firebase.RTDB.setString(&fbdo, "/output/MAGAZINE/state", "on");
+      Firebase.RTDB.setString(&fbdo, "/output/TRAVA/state", "off");
+    }
+   
+    // Se sensor medidor meio está ativado
+    if(digitalRead(ENTRADA_D33) == HIGH){
+      delay(1000);
+      digitalWrite(SAIDA_D22, HIGH);  // Ativa a esteira
+      Firebase.RTDB.setString(&fbdo, "/output/ESTEIRA/state", "on");
+      delay(1000);
+      digitalWrite(SAIDA_D22, LOW);   // Desativa a esteira
+      Firebase.RTDB.setString(&fbdo, "/output/ESTEIRA/state", "off");
+      delay(1000);
+      digitalWrite(SAIDA_D19, LOW);   // Desativa o magazine
+      Firebase.RTDB.setString(&fbdo, "/output/MAGAZINE/state", "off");
+      digitalWrite(SAIDA_D18, HIGH);  // Ativa o medidor
+      Firebase.RTDB.setString(&fbdo, "/output/MEDIDOR/state", "on");
+    }
+
+    // Se sensor medidor final está ativado e medidor está ativado
+    if(digitalRead(ENTRADA_D25) == HIGH && digitalRead(SAIDA_D18) == HIGH){
+      delay(1500);
+      digitalWrite(SAIDA_D4, LOW);    // Desativa movimento final
+      Firebase.RTDB.setString(&fbdo, "/output/MOV_FINAL/state", "off");
+      digitalWrite(SAIDA_RX2, HIGH);  // Ativa movimento inicial
+      Firebase.RTDB.setString(&fbdo, "/output/MOV_INICIAL/state", "on");
+      delay(4000);
+      digitalWrite(SAIDA_D18, LOW);   // Desativa o medidor
+      Firebase.RTDB.setString(&fbdo, "/output/MEDIDOR/state", "off");
+      digitalWrite(SAIDA_TX2, LOW);    // Desativa a garra
+      Firebase.RTDB.setString(&fbdo, "/output/GARRA/state", "off");
+      digitalWrite(SAIDA_D4, HIGH);    // Ativa movimento final
+      Firebase.RTDB.setString(&fbdo, "/output/MOV_FINAL/state", "on");
+      digitalWrite(SAIDA_RX2, LOW);    // Desativa movimento inicial
+      Firebase.RTDB.setString(&fbdo, "/output/MOV_INICIAL/state", "off");
+      delay(1000);
+      digitalWrite(SAIDA_D23, HIGH);   // Ativa a trava/pino
+      Firebase.RTDB.setString(&fbdo, "/output/TRAVA/state", "on");
+    }
+  }
+  else{
+    // Estado padrão quando sensor de garra não está ativado
+    digitalWrite(SAIDA_D23, HIGH);   // Ativa a trava/pino
+    digitalWrite(SAIDA_TX2, LOW);    // Desativa a garra
+    Firebase.RTDB.setString(&fbdo, "/output/TRAVA/state", "on");
+    Firebase.RTDB.setString(&fbdo, "/output/GARRA/state", "off");
+  }
+}
+
+// ========== ATUALIZAR SAÍDAS A PARTIR DO FIREBASE ==========
+void actualizarSalidasDesdeFirebase() {
+  if (Firebase.ready()) {
+    String path;
+    String value;
+    
+    // Modo Automático
+    path = "/output/AUTOMATICO/state";
+    if (Firebase.RTDB.getString(&fbdo, path)) {
+      value = fbdo.stringData();
+      stateAutomatico = value;
+    }
+    
+    // GARRA (SAIDA_TX2 - 17)
+    path = "/output/GARRA/state";
+    if (Firebase.RTDB.getString(&fbdo, path)) {
+      value = fbdo.stringData();
+      if (value == "on") {
+        digitalWrite(SAIDA_TX2, HIGH);
+        stateGarra = "on";
+      } else {
+        digitalWrite(SAIDA_TX2, LOW);
+        stateGarra = "off";
+      }
+    }
+    
+    // TRAVA/PINO (SAIDA_D23 - 23)
+    path = "/output/TRAVA/state";
+    if (Firebase.RTDB.getString(&fbdo, path)) {
+      value = fbdo.stringData();
+      if (value == "on") {
+        digitalWrite(SAIDA_D23, HIGH);
+        stateInicio = "on";
+      } else {
+        digitalWrite(SAIDA_D23, LOW);
+        stateInicio = "off";
+      }
+    }
+    
+    // MAGAZINE (SAIDA_D19 - 19)
+    path = "/output/MAGAZINE/state";
+    if (Firebase.RTDB.getString(&fbdo, path)) {
+      value = fbdo.stringData();
+      if (value == "on") {
+        digitalWrite(SAIDA_D19, HIGH);
+        stateCentro = "on";
+      } else {
+        digitalWrite(SAIDA_D19, LOW);
+        stateCentro = "off";
+      }
+    }
+    
+    // MEDIDOR (SAIDA_D18 - 18)
+    path = "/output/MEDIDOR/state";
+    if (Firebase.RTDB.getString(&fbdo, path)) {
+      value = fbdo.stringData();
+      if (value == "on") {
+        digitalWrite(SAIDA_D18, HIGH);
+        stateFinal = "on";
+      } else {
+        digitalWrite(SAIDA_D18, LOW);
+        stateFinal = "off";
+      }
+    }
+    
+    // ESTEIRA (SAIDA_D22 - 22)
+    path = "/output/ESTEIRA/state";
+    if (Firebase.RTDB.getString(&fbdo, path)) {
+      value = fbdo.stringData();
+      if (value == "on") {
+        digitalWrite(SAIDA_D22, HIGH);
+        statePrensa = "on";
+      } else {
+        digitalWrite(SAIDA_D22, LOW);
+        statePrensa = "off";
+      }
+    }
+    
+    // MOV_FINAL (SAIDA_D4 - 4)
+    path = "/output/MOV_FINAL/state";
+    if (Firebase.RTDB.getString(&fbdo, path)) {
+      value = fbdo.stringData();
+      if (value == "on") {
+        digitalWrite(SAIDA_D4, HIGH);
+        stateZ0 = "on";
+      } else {
+        digitalWrite(SAIDA_D4, LOW);
+        stateZ0 = "off";
+      }
+    }
+    
+    // MOV_INICIAL (SAIDA_RX2 - 16)
+    path = "/output/MOV_INICIAL/state";
+    if (Firebase.RTDB.getString(&fbdo, path)) {
+      value = fbdo.stringData();
+      if (value == "on") {
+        digitalWrite(SAIDA_RX2, HIGH);
+        stateZ1 = "on";
+      } else {
+        digitalWrite(SAIDA_RX2, LOW);
+        stateZ1 = "off";
+      }
+    }
+  }
+}
+
+// ========== REPORTAR ENTRADAS PARA O FIREBASE ==========
+void reportarEntradasAFirebase() {
+  if (Firebase.ready()) {
+    // Atualiza o estado de todos os sensores no Firebase
+    entradaSensorGarra = digitalRead(ENTRADA_VP) == HIGH ? "on" : "off";
+    Firebase.RTDB.setString(&fbdo, "/input/SENSOR_GARRA/state", entradaSensorGarra);
+    
+    entradaSensorMetalico = digitalRead(ENTRADA_VN) == HIGH ? "on" : "off";
+    Firebase.RTDB.setString(&fbdo, "/input/SENSOR_METALICO/state", entradaSensorMetalico);
+    
+    entradaSensorFinal = digitalRead(ENTRADA_D34) == HIGH ? "on" : "off";
+    Firebase.RTDB.setString(&fbdo, "/input/SENSOR_FINAL/state", entradaSensorFinal);
+    
+    entradaSensorOptico2 = digitalRead(ENTRADA_D32) == HIGH ? "on" : "off";
+    Firebase.RTDB.setString(&fbdo, "/input/SENSOR_OPTICO2/state", entradaSensorOptico2);
+    
+    entradaSensorMedidorMeio = digitalRead(ENTRADA_D33) == HIGH ? "on" : "off";
+    Firebase.RTDB.setString(&fbdo, "/input/SENSOR_MEDIDOR_MEIO/state", entradaSensorMedidorMeio);
+    
+    entradaSensorMedidorFinal = digitalRead(ENTRADA_D25) == HIGH ? "on" : "off";
+    Firebase.RTDB.setString(&fbdo, "/input/SENSOR_MEDIDOR_FINAL/state", entradaSensorMedidorFinal);
+    
+    entradaSensorMagazine = digitalRead(ENTRADA_D26) == HIGH ? "on" : "off";
+    Firebase.RTDB.setString(&fbdo, "/input/SENSOR_MAGAZINE/state", entradaSensorMagazine);
+  }
+}
+
+// ========== MANIPULAÇÃO DE CLIENTES WEB ==========
+void handleWebClient() {
+  WiFiClient client = server.available();
+  if (client) {
+    currentTime = millis();
+    previousTime = currentTime;
+    String currentLine = "";
+    
+    while (client.connected() && currentTime - previousTime <= timeoutTime) {
+      currentTime = millis();
+      if (client.available()) {
+        char c = client.read();
+        header += c;
+        
+        if (c == '\n') {
+          if (currentLine.length() == 0) {
+            // Envia resposta HTTP padrão
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println("Connection: close");
+            client.println();
+            
+            // Gera a página HTML completa com o estado atual
+            // (HTML resumido nos comentários por brevidade)
+            // A página inclui:
+            // - Seção de Modo Automático
+            // - Seção de Atuadores (com botões ON/OFF)
+            // - Seção de Movimentos
+            // - Seção de Sensores (apenas visualização)
+            
+            // Contenido HTML
+            client.println("<!DOCTYPE html><html>");
+            client.println("<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+            client.println("<title>Controle Industrial</title>");
+            client.println("<link rel=\"icon\" href=\"data:,\">");
+            client.println("<style>");
+            client.println(":root {");
+            client.println("  --primary: #4285F4;");
+            client.println("  --secondary: #34A853;");
+            client.println("  --on-color: #34A853;");
+            client.println("  --off-color: #757575;");
+            client.println("  --center-on: #FBBC05;");
+            client.println("  --text-light: #f5f5f5;");
+            client.println("  --panel-bg: #424242;");
+            client.println("  --bg-color: #303030;");
+            client.println("  --divider: #616161;");
+            client.println("}");
+            client.println("body {");
+            client.println("  font-family: Arial, sans-serif;");
+            client.println("  background-color: var(--bg-color);");
+            client.println("  color: var(--text-light);");
+            client.println("  margin: 0;");
+            client.println("  padding: 20px;");
+            client.println("  text-align: center;");
+            client.println("}");
+            client.println("h1 {");
+            client.println("  color: var(--primary);");
+            client.println("  font-size: 1.8rem;");
+            client.println("  margin-bottom: 20px;");
+            client.println("}");
+            client.println(".control-panel {");
+            client.println("  background-color: var(--panel-bg);");
+            client.println("  border-radius: 8px;");
+            client.println("  padding: 20px;");
+            client.println("  margin: 10px auto;");
+            client.println("  max-width: 500px;");
+            client.println("  box-shadow: 0 2px 10px rgba(0,0,0,0.3);");
+            client.println("}");
+            client.println(".section-title {");
+            client.println("  color: var(--primary);");
+            client.println("  margin: 15px 0 10px;");
+            client.println("  font-size: 1.1rem;");
+            client.println("  font-weight: bold;");
+            client.println("}");
+            client.println(".btn {");
+            client.println("  border: none;");
+            client.println("  color: white;");
+            client.println("  padding: 12px 24px;");
+            client.println("  margin: 6px;");
+            client.println("  border-radius: 4px;");
+            client.println("  font-size: 1rem;");
+            client.println("  cursor: pointer;");
+            client.println("  transition: all 0.3s;");
+            client.println("  width: 90%;");
+            client.println("  max-width: 250px;");
+            client.println("  font-weight: bold;");
+            client.println("}");
+            client.println(".btn-on {");
+            client.println("  background-color: var(--on-color);");
+            client.println("}");
+            client.println(".btn-off {");
+            client.println("  background-color: var(--off-color);");
+            client.println("}");
+            client.println(".btn-center-on {");
+            client.println("  background-color: var(--center-on);");
+            client.println("  color: #202124;");
+            client.println("}");
+            client.println(".btn:hover {");
+            client.println("  opacity: 0.9;");
+            client.println("  transform: translateY(-1px);");
+            client.println("}");
+            client.println(".btn:active {");
+            client.println("  transform: translateY(0);");
+            client.println("}");
+            client.println(".input-container {");
+            client.println("  display: flex;");
+            client.println("  flex-direction: column;");
+            client.println("  align-items: center;");
+            client.println("  margin: 10px 0;");
+            client.println("}");
+            client.println(".input-label {");
+            client.println("  font-size: 0.9rem;");
+            client.println("  margin-bottom: 5px;");
+            client.println("  color: #BDBDBD;");
+            client.println("}");
+            client.println(".divider {");
+            client.println("  height: 1px;");
+            client.println("  background-color: var(--divider);");
+            client.println("  margin: 20px 0;");
+            client.println("}");
+            client.println("@media (max-width: 600px) {");
+            client.println("  .btn {");
+            client.println("    padding: 10px 20px;");
+            client.println("    font-size: 0.9rem;");
+            client.println("  }");
+            client.println("  h1 {");
+            client.println("    font-size: 1.5rem;");
+            client.println("  }");
+            client.println("}");
+            client.println("</style>");
+            client.println("</head>");
+
+            client.println("<body>");
+            client.println("<h1>Controle Industrial</h1>");
+            client.println("<div class=\"control-panel\">");
+
+            // Modo automatico
+            client.println("<div class=\"section-title\">Modo Automatico</div>");
+            client.println("<div class=\"input-container\">");
+            if (stateAutomatico == "on") {
+              client.println("<a href=\"/off\"><button class=\"btn btn-on\">AUTOMATICO ON</button></a>");
+            } else {
+              client.println("<a href=\"/on\"><button class=\"btn btn-off\">AUTOMATICO OFF</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"divider\"></div>");
+
+            // Atuadores
+            client.println("<div class=\"section-title\">Atuadores</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Garra</div>");
+            if (stateGarra == "on") {
+              client.println("<a href=\"/17/off\"><button class=\"btn btn-on\">ON</button></a>");
+            } else {
+              client.println("<a href=\"/17/on\"><button class=\"btn btn-off\">OFF</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Inicio</div>");
+            if (stateInicio == "on") {
+              client.println("<a href=\"/23/off\"><button class=\"btn btn-on\">ON</button></a>");
+            } else {
+              client.println("<a href=\"/23/on\"><button class=\"btn btn-off\">OFF</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Centro</div>");
+            if (stateCentro == "on") {
+              client.println("<a href=\"/19/off\"><button class=\"btn btn-center-on\">ON</button></a>");
+            } else {
+              client.println("<a href=\"/19/on\"><button class=\"btn btn-off\">OFF</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Final</div>");
+            if (stateFinal == "on") {
+              client.println("<a href=\"/18/off\"><button class=\"btn btn-on\">ON</button></a>");
+            } else {
+              client.println("<a href=\"/18/on\"><button class=\"btn btn-off\">OFF</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Prensa</div>");
+            if (statePrensa == "on") {
+              client.println("<a href=\"/22/off\"><button class=\"btn btn-on\">ON</button></a>");
+            } else {
+              client.println("<a href=\"/22/on\"><button class=\"btn btn-off\">OFF</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"divider\"></div>");
+
+            // Movimentos
+            client.println("<div class=\"section-title\">Movimentos</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Movimento Final</div>");
+            if (stateZ0 == "on") {
+              client.println("<a href=\"/4/off\"><button class=\"btn btn-on\">ON</button></a>");
+            } else {
+              client.println("<a href=\"/4/on\"><button class=\"btn btn-off\">OFF</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Movimento Inicial</div>");
+            if (stateZ1 == "on") {
+              client.println("<a href=\"/16/off\"><button class=\"btn btn-on\">ON</button></a>");
+            } else {
+              client.println("<a href=\"/16/on\"><button class=\"btn btn-off\">OFF</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"divider\"></div>");
+
+            // Sensores
+            client.println("<div class=\"section-title\">Sensores</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Sensor Garra (ED0)</div>");
+            if (entradaSensorGarra == "on") {
+              client.println("<button class=\"btn btn-on\">ATIVO</button>");
+            } else {
+              client.println("<button class=\"btn btn-off\">INATIVO</button>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Sensor Metalico (ED1)</div>");
+            if (entradaSensorMetalico == "on") {
+              client.println("<button class=\"btn btn-on\">ATIVO</button>");
+            } else {
+              client.println("<button class=\"btn btn-off\">INATIVO</button>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Sensor Final (ED2)</div>");
+            if (entradaSensorFinal == "on") {
+              client.println("<button class=\"btn btn-on\">ATIVO</button>");
+            } else {
+              client.println("<button class=\"btn btn-off\">INATIVO</button>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Sensor Optico 2 (ED3)</div>");
+            if (entradaSensorOptico2 == "on") {
+              client.println("<button class=\"btn btn-on\">ATIVO</button>");
+            } else {
+              client.println("<button class=\"btn btn-off\">INATIVO</button>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Sensor Medidor Meio (ED4)</div>");
+            if (entradaSensorMedidorMeio == "on") {
+              client.println("<button class=\"btn btn-on\">ATIVO</button>");
+            } else {
+              client.println("<button class=\"btn btn-off\">INATIVO</button>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Sensor Medidor Final (ED5)</div>");
+            if (entradaSensorMedidorFinal == "on") {
+              client.println("<button class=\"btn btn-on\">ATIVO</button>");
+            } else {
+              client.println("<button class=\"btn btn-off\">INATIVO</button>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Sensor Magazine (ED6)</div>");
+            if (entradaSensorMagazine == "on") {
+              client.println("<button class=\"btn btn-on\">ATIVO</button>");
+            } else {
+              client.println("<button class=\"btn btn-off\">INATIVO</button>");
+            }
+            client.println("</div>");
+
+            client.println("</div>"); // Fecha control-panel
+            client.println("</body></html>");
+            
+            client.println();
+            break;
+          } else {
+            currentLine = "";
+          }
+        } else if (c != '\r') {
+          currentLine += c;
+        }
+
+            // Manipulação de comandos dos botões web
+            if (header.indexOf("GET /17/on") >= 0) {
+              digitalWrite(SAIDA_TX2, HIGH);
+              Firebase.RTDB.setString(&fbdo, "/output/GARRA/state", "on");
+            } else if (header.indexOf("GET /17/off") >= 0) {
+              digitalWrite(SAIDA_TX2, LOW);
+              Firebase.RTDB.setString(&fbdo, "/output/GARRA/state", "off");
+            }
+            
+            // Manipulação do modo automático
+            if (header.indexOf("GET /on") >= 0) {
+              stateAutomatico = "on";
+              Firebase.RTDB.setString(&fbdo, "/output/AUTOMATICO/state", "on");
+            } else if (header.indexOf("GET /off") >= 0) {
+              stateAutomatico = "off";
+              Firebase.RTDB.setString(&fbdo, "/output/AUTOMATICO/state", "off");
+            }
+          }
+        }
+          header = "";
+          client.stop();
+      }
+    }
+    
+
+
+
+// ========== LOOP PRINCIPAL ==========
+void loop() {
+  // Executa modo automático se estiver ativado
+  if(stateAutomatico == "on") {
+    modoAutomatico();
+  }
+
+  // Atualiza Firebase periodicamente
+  if (millis() - lastFirebaseUpdate > firebaseInterval) {
+    lastFirebaseUpdate = millis();
+    reportarEntradasAFirebase();
+    actualizarSalidasDesdeFirebase();
+  }
+
+  // Manipula clientes web
+  handleWebClient();
+}
