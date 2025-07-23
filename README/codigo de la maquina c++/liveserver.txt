@@ -1,4 +1,5 @@
 // LIVE SERVER
+// Não use este arquivo e o Firebase ao mesmo tempo, cada um é para uma função específica e eles não foram feitos para trabalhar juntos.
 
 #include <Arduino.h>
 #include <WiFi.h>
