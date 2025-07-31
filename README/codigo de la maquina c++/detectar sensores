@@ -1,0 +1,109 @@
+// Estados de sensores
+String entradaSensorGarra = "off";
+String entradaSensorInicio = "off";
+String entradaSensorFinal = "off";
+String entradaSensorAcima = "off";
+String entradaSensorBaixo = "off";
+
+void loop() {
+  if(stateAutomatico == "on") {
+    modoAutomatico();
+  }
+
+  WiFiClient client = server.available();
+  
+  if (client) {
+    currentTime = millis();
+    previousTime = currentTime;
+    Serial.println("New Client.");
+    String currentLine = "";
+    
+    while (client.connected() && currentTime - previousTime <= timeoutTime) {
+      currentTime = millis();
+      
+      if (client.available()) {
+        char c = client.read();
+        Serial.write(c);
+        header += c;
+        
+        if (c == '\n') {
+          if (currentLine.length() == 0) {
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println("Connection: close");
+            client.println();
+
+            entradaSensorInicio = (digitalRead(ENTRADA_VN) == HIGH) ? "on" : "off";
+            entradaSensorGarra = (digitalRead(ENTRADA_D26) == HIGH) ? "on" : "off";
+            entradaSensorAcima = (digitalRead(ENTRADA_D25) == HIGH) ? "on" : "off";
+            entradaSensorBaixo = (digitalRead(ENTRADA_D33) == HIGH) ? "on" : "off";
+            entradaSensorFinal = (digitalRead(ENTRADA_D34) == HIGH) ? "on" : "off";
+
+            
+            // Sección Sensores
+            client.println("<div class=\"section-title\">Sensores</div>");
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Sensor Garra (ED0)</div>");
+            if (entradaSensorGarra == "on") {
+              client.println("<a href=\"/26/off\"><button class=\"btn btn-on\">ATIVO</button></a>");
+            } else {
+              client.println("<a href=\"/26/on\"><button class=\"btn btn-off\">INATIVO</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Sensor Metalico (ED1)</div>");
+            if (entradaSensorInicio == "on") {
+              client.println("<a href=\"/39/off\"><button class=\"btn btn-on\">ATIVO</button></a>");
+            } else {
+              client.println("<a href=\"/39/on\"><button class=\"btn btn-off\">INATIVO</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Sensor Final (ED2)</div>");
+            if (entradaSensorFinal == "on") {
+              client.println("<a href=\"/34/off\"><button class=\"btn btn-on\">ATIVO</button></a>");
+            } else {
+              client.println("<a href=\"/34/on\"><button class=\"btn btn-off\">INATIVO</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Sensor Optico 2 (ED3)</div>");
+            if (entradaSensorAcima == "on") {
+              client.println("<a href=\"/25/off\"><button class=\"btn btn-on\">ATIVO</button></a>");
+            } else {
+              client.println("<a href=\"/25/on\"><button class=\"btn btn-off\">INATIVO</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("<div class=\"input-container\">");
+            client.println("<div class=\"input-label\">Sensor Medidor Meio (ED4)</div>");
+            if (entradaSensorBaixo == "on") {
+              client.println("<a href=\"/33/off\"><button class=\"btn btn-on\">ATIVO</button></a>");
+            } else {
+              client.println("<a href=\"/33/on\"><button class=\"btn btn-off\">INATIVO</button></a>");
+            }
+            client.println("</div>");
+
+            client.println("</div>");
+            client.println("</body></html>");
+            
+            client.println();
+            break;
+          } else {
+            currentLine = "";
+          }
+        } else if (c != '\r') {
+          currentLine += c;
+        }
+      }
+    }
+    
+    header = "";
+    client.stop();
+    Serial.println("Client disconnected.");
+    Serial.println("");
+  }
+}
